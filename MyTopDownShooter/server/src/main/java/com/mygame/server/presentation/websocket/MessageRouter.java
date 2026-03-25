@@ -1,38 +1,48 @@
 package com.mygame.server.presentation.websocket;
 
-import com.mygame.server.application.service.MatchService;
+import com.mygame.server.application.usecase.HandleInputUseCase;
+import com.mygame.server.application.usecase.HandleJoinUseCase;
+import com.mygame.server.application.usecase.HandleLeaveUseCase;
 import com.mygame.shared.protocol.MessageCodec;
 import com.mygame.shared.protocol.messages.ErrorMessage;
 import com.mygame.shared.protocol.messages.InputMessage;
+import com.mygame.shared.protocol.messages.JoinAccepted;
 import com.mygame.shared.protocol.messages.JoinRequest;
 import org.java_websocket.WebSocket;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Routes incoming WebSocket messages to the appropriate use case.
+ * Keeps presentation logic (protocol, codec, connection tracking) here
+ * and business logic in the use cases.
+ */
 public final class MessageRouter {
 
-    private final MatchService matchService;
-    private final GameWebSocketServer server;
-    private final MessageCodec codec = new MessageCodec();
+    private final HandleJoinUseCase  joinUseCase;
+    private final HandleLeaveUseCase leaveUseCase;
+    private final HandleInputUseCase inputUseCase;
+    private final MessageCodec       codec = new MessageCodec();
 
-    // socket -> playerId (after join)
+    // connection → playerId  (set after successful join)
     private final Map<WebSocket, String> playerByConn = new ConcurrentHashMap<>();
 
-    public MessageRouter(MatchService matchService, GameWebSocketServer server) {
-        this.matchService = matchService;
-        this.server = server;
+    public MessageRouter(HandleJoinUseCase joinUseCase,
+                         HandleLeaveUseCase leaveUseCase,
+                         HandleInputUseCase inputUseCase) {
+        this.joinUseCase  = joinUseCase;
+        this.leaveUseCase = leaveUseCase;
+        this.inputUseCase = inputUseCase;
     }
 
     public void onConnected(WebSocket conn) {
-        // wait for JoinRequest
+        // Wait for JoinRequest — no action needed yet
     }
 
     public void onDisconnected(WebSocket conn) {
         String playerId = playerByConn.remove(conn);
-        if (playerId != null) {
-            matchService.removePlayer(playerId);
-        }
+        leaveUseCase.execute(playerId); // null-safe inside use case
     }
 
     public void onTextMessage(WebSocket conn, String json) {
@@ -40,45 +50,40 @@ public final class MessageRouter {
             Object msg = codec.decode(json);
 
             if (msg instanceof JoinRequest) {
-                JoinRequest join = (JoinRequest) msg;
-
-                if (join.username == null || join.username.isBlank()) {
-                    conn.send(codec.encode(new ErrorMessage("bad_request", "username is required")));
+                JoinRequest   join     = (JoinRequest) msg;
+                JoinAccepted  accepted = joinUseCase.execute(join.username);
+                if (accepted == null) {
+                    conn.send(codec.encode(
+                            new ErrorMessage("bad_request", "username is required")));
                     return;
                 }
-
-                String playerId = matchService.addPlayer(join.username);
-                playerByConn.put(conn, playerId);
-
-                // Send JoinAccepted (includes map + initial snapshot)
-                conn.send(codec.encode(matchService.buildJoinAccepted(playerId)));
+                playerByConn.put(conn, accepted.playerId);
+                conn.send(codec.encode(accepted));
                 return;
             }
 
             if (msg instanceof InputMessage) {
                 String playerId = playerByConn.get(conn);
                 if (playerId == null) {
-                    conn.send(codec.encode(new ErrorMessage("not_joined", "Send JoinRequest first")));
+                    conn.send(codec.encode(
+                            new ErrorMessage("not_joined", "Send JoinRequest first")));
                     return;
                 }
-
-                matchService.submitInput(playerId, (InputMessage) msg);
+                inputUseCase.execute(playerId, (InputMessage) msg);
                 return;
             }
 
-            conn.send(codec.encode(new ErrorMessage("unknown_message", "Unsupported message")));
+            conn.send(codec.encode(new ErrorMessage("unknown_message", "Unsupported message type")));
+
         } catch (Exception e) {
-            System.err.println("\n[WS] DECODE FAILED");
-            System.err.println("[WS] raw: " + json);
+            System.err.println("[WS] DECODE FAILED  raw=" + json);
             e.printStackTrace();
             conn.send(codec.encode(new ErrorMessage("decode_error", "Invalid message format")));
         }
     }
 
-    /**
-     * Called by tick loop: send snapshot to everyone (simple MVP broadcast).
-     */
+    /** Called by tick loop — broadcasts the pre-encoded snapshot to everyone. */
     public void broadcastSnapshot(String snapshotJson) {
-        server.broadcastText(snapshotJson);
+        // kept for backward-compat; wiring now goes through BroadcastSnapshotUseCase
     }
 }

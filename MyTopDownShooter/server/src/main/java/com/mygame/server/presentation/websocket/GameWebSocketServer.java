@@ -1,6 +1,8 @@
 package com.mygame.server.presentation.websocket;
 
-import com.mygame.server.application.service.MatchService;
+import com.mygame.server.application.usecase.HandleInputUseCase;
+import com.mygame.server.application.usecase.HandleJoinUseCase;
+import com.mygame.server.application.usecase.HandleLeaveUseCase;
 import org.java_websocket.WebSocket;
 import org.java_websocket.handshake.ClientHandshake;
 import org.java_websocket.server.WebSocketServer;
@@ -11,9 +13,12 @@ public final class GameWebSocketServer extends WebSocketServer {
 
     private final MessageRouter router;
 
-    public GameWebSocketServer(int port, MatchService matchService) {
+    public GameWebSocketServer(int port,
+                               HandleJoinUseCase joinUseCase,
+                               HandleLeaveUseCase leaveUseCase,
+                               HandleInputUseCase inputUseCase) {
         super(new InetSocketAddress(port));
-        this.router = new MessageRouter(matchService, this);
+        this.router = new MessageRouter(joinUseCase, leaveUseCase, inputUseCase);
     }
 
     @Override

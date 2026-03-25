@@ -5,6 +5,7 @@ import com.mygame.shared.dto.PickupDto;
 import com.mygame.shared.dto.ProjectileDto;
 import com.mygame.shared.dto.TileType;
 import com.mygame.shared.util.Vec2;
+// PickupState lives in domain; PickupDto is only for transport
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -23,7 +24,7 @@ public final class ServerGameState {
 
     public final Map<String, PlayerState> players = new ConcurrentHashMap<>();
     public final List<ProjectileState> projectiles = Collections.synchronizedList(new ArrayList<>());
-    public final List<PickupDto> pickups = Collections.synchronizedList(new ArrayList<>());
+    public final List<PickupState> pickups = Collections.synchronizedList(new ArrayList<>());
 
     private int spawnIndex = 0;
 
@@ -114,17 +115,14 @@ public final class ServerGameState {
         int tx = (int)Math.floor(wx);
         int ty = (int)Math.floor(wy);
         if (!inBounds(tx, ty)) return false;
-
-        TileType tt = tiles[idx(tx, ty, width)];
-        // Walkable: FLOOR, TRAP
-        return tt == TileType.FLOOR || tt == TileType.TRAP;
+        return Tile.isWalkable(tiles[idx(tx, ty, width)]);
     }
 
     public boolean isTrapAtWorld(float wx, float wy) {
         int tx = (int)Math.floor(wx);
         int ty = (int)Math.floor(wy);
         if (!inBounds(tx, ty)) return false;
-        return tiles[idx(tx, ty, width)] == TileType.TRAP;
+        return Tile.damagePerSecond(tiles[idx(tx, ty, width)]) > 0f;
     }
 
     private boolean inBounds(int x, int y) {
@@ -139,9 +137,6 @@ public final class ServerGameState {
         int tx = (int)Math.floor(wx);
         int ty = (int)Math.floor(wy);
         if (!inBounds(tx, ty)) return true; // outside map blocks
-
-        TileType tt = tiles[idx(tx, ty, width)];
-        // Projectiles: WALL blocks, everything else passes (WINDOW passes)
-        return tt == TileType.WALL;
+        return Tile.blocksProjectile(tiles[idx(tx, ty, width)]);
     }
 }
