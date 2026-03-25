@@ -1,70 +1,103 @@
-# MyTopDownShooter (MVP)
-libGDX (client) and Java WebSocket (server)
+# Loot'em Shoot'em
 
-# Linux (Ubuntu / Pop!_OS)
-java --version
-(Must show Java 11)
+Multiplayer top-down shooter built with LibGDX (client) and Java WebSocket (server).
 
-# Install Java 11 if missing
-sudo apt update
-sudo apt install openjdk-11-jdk
+Players join from a shared server URL, fight over weapon pickups and health packs, and compete on a live kill leaderboard. Supports desktop and Android.
 
-# Windows (Git Bash recommended)
-java --version
-(Must show Java 11)
+---
 
+## Requirements
 
-git clone [<YOUR_REPO_URL>](https://github.com/kristiancarlenius/TDT4240-game.git)
-cd TDT4240-game/MyTopDownShooter
+- Java 11
 
-# OR unzip archive and:
-cd TDT4240-game/MyTopDownShooter
+```bash
+java --version   # must show 11.x
+```
 
-# IMPORTANT:
-# Run server and client in separate terminals
+Install on Ubuntu/Pop!_OS if missing:
+```bash
+sudo apt update && sudo apt install openjdk-11-jdk
+```
 
-# ---------- TERMINAL 1 (SERVER) ----------
+---
 
+## Running
+
+Server and client must run in **separate terminals** from the `LootemShootem/` folder.
+
+**Terminal 1 — Server**
+```bash
 # Linux
-./gradlew clean :server:run
+./gradlew :server:run
 
 # Windows (Git Bash)
-./gradlew.bat clean :server:run
+./gradlew.bat :server:run
+```
 
+Server starts on `ws://localhost:8080/ws` by default. Port and tick rate can be changed in `server/src/main/resources/server.conf`.
 
-# ---------- TERMINAL 2 (CLIENT) ----------
-
+**Terminal 2 — Client**
+```bash
 # Linux
 ./gradlew :desktop:run
 
-# Windows (Git Bash)
+# Windows
 ./gradlew.bat :desktop:run
+```
 
-Run :desktop:run multiple times to open multiple clients
+Enter the server URL and a username on the main menu, then hit **Connect**. Open more client windows to add more players.
 
+---
 
-# List projects
-./gradlew projects
+## Controls
 
-# List server tasks
-./gradlew :server:tasks
+| Action | Desktop |
+|--------|---------|
+| Move | WASD |
+| Aim & shoot | Mouse (left click) |
+| Switch weapon | Space |
+| Back to menu | Escape |
 
-# List desktop tasks
-./gradlew :desktop:tasks
+On Android, move and aim joysticks appear on screen. Tap **SW** to switch weapons.
 
-# Clean build
-./gradlew clean
+---
 
+## Gameplay
 
-# Port 8080 already in use (Linux)
-sudo lsof -i :8080
-sudo kill -9 <PID>
+- Pick up weapons, health packs, and speed boosts scattered around the map
+- You carry up to **2 weapons** — switching is instant, no reload delay
+- Dying drops your secondary weapon for others to grab
+- Health regenerates slowly while alive
+- Kill feed appears top-left; leaderboard top-right
+
+---
+
+## Project layout
+
+```
+LootemShootem/
+  server/     authoritative game server (WebSocket, 20 Hz tick loop)
+  core/       shared client code (LibGDX, MVC)
+  desktop/    desktop launcher (LWJGL3)
+  android/    Android launcher
+  shared/     DTOs and protocol shared between client and server
+```
+
+---
+
+## Troubleshooting
+
+**Port 8080 already in use**
+```bash
+# Linux
 sudo fuser -k 8080/tcp
 
-# Port 8080 already in use (Windows Git Bash)
+# Windows
 netstat -ano | findstr :8080
 taskkill /PID <PID> /F
+```
 
-# gradlew permission denied (Linux)
+**Permission denied on gradlew (Linux)**
+```bash
 chmod +x ./gradlew
-
+```
