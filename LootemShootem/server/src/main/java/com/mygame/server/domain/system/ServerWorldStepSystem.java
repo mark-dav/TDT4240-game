@@ -66,8 +66,8 @@ public final class ServerWorldStepSystem {
 
             p.shootCooldownSeconds = Math.max(0f, p.shootCooldownSeconds - dt);
 
-            // Weapon switch
-            if (in != null && in.switchWeapon && in.seq > p.lastSwitchSeq && !p.isReloading) {
+            // Weapon switch — always allowed; cancels any active reload
+            if (in != null && in.switchWeapon && in.seq > p.lastSwitchSeq) {
                 p.lastSwitchSeq = in.seq;
                 int nextSlot = 1 - p.currentSlot;
                 if (p.inventory[nextSlot] != null) {
@@ -76,6 +76,8 @@ public final class ServerWorldStepSystem {
                     p.currentSlot               = nextSlot;
                     p.syncEquipped();
                     p.shootCooldownSeconds = 0f;
+                    p.isReloading          = false;
+                    p.reloadTimer          = 0f;
                 }
             }
 

@@ -40,7 +40,7 @@ public final class WorldRenderer {
     private final Map<WeaponType, Texture> weaponTex  = new EnumMap<>(WeaponType.class);
     private Texture playerLocalTex;
     private Texture playerEnemyTex;
-    private Texture chestClosedTex;
+    private final Texture[] chestTex = new Texture[2]; // chest_0 / chest_1 for closed variants
     private Texture chestOpenTex;
 
     public WorldRenderer(WorldState worldState,
@@ -62,7 +62,7 @@ public final class WorldRenderer {
         weaponTex.values().forEach(Texture::dispose);
         if (playerLocalTex != null) playerLocalTex.dispose();
         if (playerEnemyTex != null) playerEnemyTex.dispose();
-        if (chestClosedTex != null) chestClosedTex.dispose();
+        for (Texture t : chestTex) if (t != null) t.dispose();
         if (chestOpenTex   != null) chestOpenTex.dispose();
     }
 
@@ -177,7 +177,10 @@ public final class WorldRenderer {
     }
 
     private Texture resolveChestTexture(ChestDto c) {
-        return c.isOpen ? chestOpenTex : chestClosedTex;
+        if (c.isOpen) return chestOpenTex;
+        // Pick variant deterministically from chestId — no protocol change needed
+        int v = Math.abs(c.chestId.hashCode()) % 2;
+        return chestTex[v];
     }
 
     // ── Pickups ──────────────────────────────────────────────────────────────
@@ -248,13 +251,53 @@ public final class WorldRenderer {
         for (PlayerDto p : snap.players) {
             if (p.pos == null || p.isDead) continue;
             boolean isMe = localId != null && localId.equals(p.playerId);
-            Texture tx   = isMe ? playerLocalTex : playerEnemyTex;
-            if (tx == null) continue;
-            float r = 0.30f;
-            batch.draw(tx, p.pos.x - r, p.pos.y - r, r * 2, r * 2);
-            // Always draw the facing indicator on top even for textured players
-            // (done in shape pass separately after sprites)
+
+            // Player body
+            Texture bodyTex = isMe ? playerLocalTex : playerEnemyTex;
+            if (bodyTex != null) {
+                float r = 0.30f;
+                batch.draw(bodyTex, p.pos.x - r, p.pos.y - r, r * 2, r * 2);
+            }
+
+            // Equipped weapon drawn on top, rotated toward aim direction
+            drawWeaponOverlay(p);
         }
+    }
+
+    /**
+     * Draws the equipped weapon sprite at the player's position, rotated toward
+     * {@code p.facing}. When the weapon would end up pointing left (|angle| > 90°)
+     * it is flipped horizontally so it never appears upside-down.
+     *
+     * All weapon PNGs are assumed to point straight RIGHT in their natural orientation.
+     */
+    private void drawWeaponOverlay(PlayerDto p) {
+        if (p.facing == null || p.equippedWeaponType == null) return;
+        Texture wt = weaponTex.get(p.equippedWeaponType);
+        if (wt == null) return;
+
+        float angle  = (float) Math.toDegrees(Math.atan2(p.facing.y, p.facing.x));
+        boolean flip = Math.abs(angle) > 90f;
+        // When flipped the gun points left at 0°; mirror the angle around 180° so it still
+        // lands on the correct side.
+        float drawAngle = flip ? (180f - angle) : angle;
+
+        float weapW = 1.68f;  // 3× original
+        float weapH = 0.54f;  // 3× original
+        // Pivot at the grip end; swap to the other edge when flipped so the grip
+        // stays at the player's centre regardless of direction.
+        float origX = flip ? weapW : 0f;
+        float origY = weapH / 2f;
+
+        batch.draw(wt,
+                p.pos.x - origX,   // bottom-left x so that origX lands on player centre
+                p.pos.y - origY,   // bottom-left y so that origY is at vertical centre
+                origX, origY,
+                weapW, weapH,
+                1f, 1f,
+                drawAngle,
+                0, 0, wt.getWidth(), wt.getHeight(),
+                flip, false);
     }
 
     // ── Projectiles ──────────────────────────────────────────────────────────
@@ -287,7 +330,8 @@ public final class WorldRenderer {
         }
         playerLocalTex = tryLoad("characters/player_local.png");
         playerEnemyTex = tryLoad("characters/player_enemy.png");
-        chestClosedTex = tryLoad("chests/chest_closed.png");
+        chestTex[0]    = tryLoad("chests/chest_0.png");
+        chestTex[1]    = tryLoad("chests/chest_1.png");
         chestOpenTex   = tryLoad("chests/chest_open.png");
     }
 

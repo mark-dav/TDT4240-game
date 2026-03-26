@@ -137,14 +137,7 @@ public final class PickupSpawnSystem {
         p.reloadTimer               = 0f;
         p.syncEquipped();
 
-        // Drop old weapon next to the player
-        state.pickups.add(new PickupState(
-                UUID.randomUUID().toString(), PickupType.WEAPON,
-                new Vec2(p.pos.x, p.pos.y),
-                0, 0f, dropped, droppedAmmo, droppedMags));
-
-        p.lastPickupNotice = "Swapped to " + incoming.name()
-                + " (dropped " + (dropped != null ? dropped.name() : "nothing") + ")";
+        p.lastPickupNotice = "Swapped to " + incoming.name();
     }
 
     /**

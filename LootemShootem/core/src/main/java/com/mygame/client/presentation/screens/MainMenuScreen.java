@@ -23,6 +23,8 @@ public final class MainMenuScreen implements Screen {
     private static final int BTN_H      = 46;
     private static final int HOW_BTN_W  = 180;
     private static final int HOW_BTN_H  = 40;
+    private static final int SET_BTN_W  = 180;
+    private static final int SET_BTN_H  = 40;
     private static final int MAX_USERNAME_LEN = 20;
     private static final int MAX_URL_LEN      = 60;
 
@@ -119,6 +121,14 @@ public final class MainMenuScreen implements Screen {
                 navigator.showTutorial(serverUrl, username);
                 return true;
             }
+            // Settings button
+            int setX = (sw - SET_BTN_W) / 2;
+            int setY = sh / 2 - 220;
+            if (screenX >= setX && screenX <= setX + SET_BTN_W
+                    && worldY >= setY && worldY <= setY + SET_BTN_H) {
+                navigator.showSettings(serverUrl, username);
+                return true;
+            }
             return false;
         }
     };
@@ -171,6 +181,8 @@ public final class MainMenuScreen implements Screen {
         int btnY   = sh / 2 - 90;
         int howX   = (sw - HOW_BTN_W)  / 2;
         int howY   = sh / 2 - 160;
+        int setX   = (sw - SET_BTN_W)  / 2;
+        int setY   = sh / 2 - 220;
 
         // --- Shapes ---
         shapes.setProjectionMatrix(proj);
@@ -193,6 +205,10 @@ public final class MainMenuScreen implements Screen {
         // How to Play button
         shapes.setColor(0.22f, 0.38f, 0.22f, 1f);
         shapes.rect(howX, howY, HOW_BTN_W, HOW_BTN_H);
+
+        // Settings button
+        shapes.setColor(0.28f, 0.28f, 0.38f, 1f);
+        shapes.rect(setX, setY, SET_BTN_W, SET_BTN_H);
 
         shapes.end();
 
@@ -231,6 +247,12 @@ public final class MainMenuScreen implements Screen {
         String howLabel = "HOW TO PLAY";
         layout.setText(font, howLabel);
         font.draw(batch, howLabel, howX + (HOW_BTN_W - layout.width) / 2f, howY + HOW_BTN_H - 10f);
+
+        // Settings button label
+        font.setColor(new Color(0.70f, 0.70f, 0.90f, 1f));
+        String setLabel = "SETTINGS";
+        layout.setText(font, setLabel);
+        font.draw(batch, setLabel, setX + (SET_BTN_W - layout.width) / 2f, setY + SET_BTN_H - 10f);
 
         // Hint
         font.setColor(0.45f, 0.45f, 0.50f, 1f);

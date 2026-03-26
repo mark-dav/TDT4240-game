@@ -21,8 +21,11 @@ public final class InputHandler {
     public final float               reloadBtnR;
 
     private final OrthographicCamera camera;
-    private boolean touchSwitchPending = false;
-    private boolean touchReloadPending = false;
+    private boolean touchSwitchPending  = false;
+    private boolean touchReloadPending  = false;
+    // Desktop latches: set every frame, cleared when consumed (prevents missing fast key taps)
+    private boolean desktopSwitchLatch  = false;
+    private boolean desktopReloadLatch  = false;
 
     public InputHandler(OrthographicCamera camera) {
         this.camera = camera;
@@ -52,6 +55,18 @@ public final class InputHandler {
     }
 
     public boolean isAndroid() { return moveStick != null; }
+
+    /**
+     * Must be called every rendered frame (before the input-send accumulator fires).
+     * Latches just-pressed desktop keys so they are never missed even when the
+     * 20 Hz send window doesn't align with the key-down frame.
+     */
+    public void pollLatching() {
+        if (!isAndroid()) {
+            if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) desktopSwitchLatch = true;
+            if (Gdx.input.isKeyJustPressed(Input.Keys.R))     desktopReloadLatch = true;
+        }
+    }
 
     public Vec2 getMove() {
         if (isAndroid()) return moveStick.getDirection();
@@ -87,7 +102,9 @@ public final class InputHandler {
             touchSwitchPending = false;
             return v;
         }
-        return Gdx.input.isKeyJustPressed(Input.Keys.SPACE);
+        boolean v = desktopSwitchLatch;
+        desktopSwitchLatch = false;
+        return v;
     }
 
     public boolean consumeReload() {
@@ -96,7 +113,9 @@ public final class InputHandler {
             touchReloadPending = false;
             return v;
         }
-        return Gdx.input.isKeyJustPressed(Input.Keys.R);
+        boolean v = desktopReloadLatch;
+        desktopReloadLatch = false;
+        return v;
     }
 
     public void clearInputProcessor() {

@@ -4,6 +4,7 @@ import com.badlogic.gdx.Game;
 import com.badlogic.gdx.Screen;
 import com.mygame.client.presentation.screens.GameScreen;
 import com.mygame.client.presentation.screens.MainMenuScreen;
+import com.mygame.client.presentation.screens.SettingsScreen;
 import com.mygame.client.presentation.screens.TutorialScreen;
 
 public final class Navigator {
@@ -24,6 +25,10 @@ public final class Navigator {
 
     public void showTutorial(String serverUrl, String username) {
         switchTo(new TutorialScreen(this, serverUrl, username));
+    }
+
+    public void showSettings(String serverUrl, String username) {
+        switchTo(new SettingsScreen(this, serverUrl, username));
     }
 
     private void switchTo(Screen next) {
