@@ -43,7 +43,7 @@ public final class MatchService {
 
     public String addPlayer(String username) {
         String id    = UUID.randomUUID().toString();
-        Vec2   spawn = state.findNextSpawn();
+        Vec2   spawn = state.findSafeSpawn();
         PlayerState ps = new PlayerState(id, username, spawn);
         // Set starter ammo from registry
         int startAmmo = weaponRegistry.get(ps.equippedWeaponType).maxAmmo;
@@ -62,6 +62,10 @@ public final class MatchService {
 
     public void submitInput(String playerId, InputMessage input) {
         latestInput.put(playerId, input);
+    }
+
+    public int getPlayerCount() {
+        return state.players.size();
     }
 
     // ---- Tick ----

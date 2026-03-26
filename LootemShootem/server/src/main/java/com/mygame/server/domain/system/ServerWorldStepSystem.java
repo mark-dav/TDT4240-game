@@ -112,7 +112,7 @@ public final class ServerWorldStepSystem {
     }
 
     private void respawnPlayer(PlayerState p) {
-        Vec2 spawn = state.findNextSpawn();
+        Vec2 spawn = state.findSafeSpawn();
         p.pos                  = spawn;
         p.hp                   = 100f;
         p.vel                  = Vec2.zero();

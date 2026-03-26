@@ -13,18 +13,15 @@ import com.mygame.client.presentation.view.input.InputHandler;
 import com.mygame.shared.dto.GameSnapshotDto;
 import com.mygame.shared.dto.PlayerDto;
 
-import java.util.ArrayDeque;
-import java.util.Iterator;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedList;
+import java.util.List;
 
 public final class HudRenderer {
 
-    private static final float KILL_FEED_TTL = 4f;
-
-    private static final class FeedEntry {
-        String text;
-        float  ttl;
-        FeedEntry(String text) { this.text = text; this.ttl = KILL_FEED_TTL; }
-    }
+    /** Maximum number of kill-feed lines kept in memory and always displayed. */
+    private static final int MAX_KILL_FEED = 5;
 
     private final WorldState   worldState;
     private final InputHandler inputHandler;
@@ -35,8 +32,9 @@ public final class HudRenderer {
     private final GlyphLayout  layout = new GlyphLayout();
     private       Matrix4      screenProj;
 
-    private final ArrayDeque<FeedEntry> killFeed = new ArrayDeque<>();
-    private long   lastProcessedTick = -1;
+    /** Last N kill messages – never expire, capped at MAX_KILL_FEED. */
+    private final LinkedList<String> killFeed          = new LinkedList<>();
+    private long                     lastProcessedTick = -1;
 
     private String pickupToast;
     private float  pickupToastTimer;
@@ -60,17 +58,22 @@ public final class HudRenderer {
         rebuildScreenProj();
     }
 
-    public void render() {
-        float delta = Gdx.graphics.getDeltaTime();
-        GameSnapshotDto snap = worldState.getSnapshot();
-        PlayerDto       me   = worldState.getLocalPlayer();
+    // ── Main render entry ─────────────────────────────────────────────────────
 
-        // Ingest new kill feed entries and pickup notices from the latest snapshot (once per tick)
+    public void render() {
+        float           delta = Gdx.graphics.getDeltaTime();
+        GameSnapshotDto snap  = worldState.getSnapshot();
+        PlayerDto       me    = worldState.getLocalPlayer();
+
+        // Ingest new kill-feed entries and pickup notices from the server (once per tick).
         if (snap != null && snap.tick > lastProcessedTick) {
             lastProcessedTick = snap.tick;
             if (snap.killFeed != null) {
                 for (String msg : snap.killFeed) {
-                    if (msg != null && !msg.isEmpty()) killFeed.addLast(new FeedEntry(msg));
+                    if (msg != null && !msg.isEmpty()) {
+                        killFeed.addLast(msg);
+                        while (killFeed.size() > MAX_KILL_FEED) killFeed.removeFirst();
+                    }
                 }
             }
             if (me != null && me.lastPickupNotice != null && !me.lastPickupNotice.isEmpty()) {
@@ -81,31 +84,27 @@ public final class HudRenderer {
 
         if (pickupToastTimer > 0f) pickupToastTimer -= delta;
 
-        // Age existing entries
-        Iterator<FeedEntry> it = killFeed.iterator();
-        while (it.hasNext()) {
-            FeedEntry e = it.next();
-            e.ttl -= delta;
-            if (e.ttl <= 0f) it.remove();
-        }
-
         if (snap == null || me == null) {
             drawConnecting();
             return;
         }
 
         if (me.isDead) {
-            drawDeathOverlay(me);
+            drawDeathOverlay(me, snap);
         } else {
             drawHealthBar(me);
-            drawPlayerInfo(me, snap);
+            drawPlayerInfo(me);
         }
 
+        // Always drawn regardless of alive/dead state
+        drawLeaderboard(snap);
         drawKillFeed();
         drawPickupToast();
 
         if (inputHandler.isAndroid()) drawTouchControls();
     }
+
+    // ── Health bar ───────────────────────────────────────────────────────────
 
     private void drawHealthBar(PlayerDto me) {
         float hpFrac = Math.max(0f, Math.min(1f, me.hp / 100f));
@@ -123,39 +122,37 @@ public final class HudRenderer {
         shapes.end();
     }
 
-    private void drawPlayerInfo(PlayerDto me, GameSnapshotDto snap) {
-        int sw = Gdx.graphics.getWidth();
-        int sh = Gdx.graphics.getHeight();
+    // ── Player info (alive) ──────────────────────────────────────────────────
+
+    private void drawPlayerInfo(PlayerDto me) {
+        int sh   = Gdx.graphics.getHeight();
         int barY = 20, barH = 18;
 
         batch.setProjectionMatrix(screenProj);
         batch.begin();
 
-        // HP label
         font.setColor(Color.WHITE);
         font.draw(batch, "HP  " + (int) me.hp + " / 100", 20, barY + barH + 18f);
 
-        // Primary weapon
         String primary = me.equippedWeaponType != null
                 ? "[" + me.equippedWeaponType.name() + "]  " + me.equippedAmmo + " ammo" : "—";
         font.setColor(new Color(0.95f, 0.95f, 0.60f, 1f));
         font.draw(batch, primary, 20, barY + barH + 36f);
 
-        // Secondary weapon (FR7)
         if (me.secondaryWeaponType != null) {
             font.setColor(new Color(0.70f, 0.70f, 0.70f, 1f));
-            String secondary = me.secondaryWeaponType.name() + "  " + me.secondaryAmmo + " ammo  [SPACE]";
-            font.draw(batch, secondary, 20, barY + barH + 56f);
+            font.draw(batch, me.secondaryWeaponType.name() + "  " + me.secondaryAmmo
+                    + " ammo  [SPACE]", 20, barY + barH + 56f);
         }
 
-        // Speed boost
         if (me.speedBoostTimer > 0f) {
             font.setColor(new Color(0.20f, 0.85f, 0.95f, 1f));
             font.draw(batch, "SPEED BOOST  " + (int) Math.ceil(me.speedBoostTimer) + "s",
                     20, barY + barH + (me.secondaryWeaponType != null ? 76f : 56f));
         }
 
-        // Kill score + time survived (top-right)
+        // Own kill count + time survived (top-right, above the leaderboard)
+        int sw = Gdx.graphics.getWidth();
         font.setColor(new Color(1f, 0.85f, 0.2f, 1f));
         String scoreText = "Kills: " + me.score;
         layout.setText(font, scoreText);
@@ -168,18 +165,48 @@ public final class HudRenderer {
         layout.setText(font, timeText);
         font.draw(batch, timeText, sw - layout.width - 20f, sh - 42f);
 
-        // Leaderboard
-        float lbY = sh - 70f;
+        batch.end();
+    }
+
+    // ── Leaderboard (always visible, sorted by total session kills) ───────────
+
+    private void drawLeaderboard(GameSnapshotDto snap) {
+        if (snap == null || snap.players == null || snap.players.length == 0) return;
+
+        // Sort descending by score (session kills)
+        List<PlayerDto> sorted = new ArrayList<>();
+        for (PlayerDto p : snap.players) sorted.add(p);
+        sorted.sort(Comparator.comparingInt((PlayerDto p) -> p.score).reversed());
+
+        int   sw     = Gdx.graphics.getWidth();
+        int   sh     = Gdx.graphics.getHeight();
+        float lbTop  = sh - 68f;   // below own stats header
+        float rowH   = 20f;
         String localId = worldState.getLocalPlayerId();
-        for (PlayerDto p : snap.players) {
-            if (localId != null && localId.equals(p.playerId)) continue;
-            font.setColor(Color.LIGHT_GRAY);
-            font.draw(batch, p.username + ": " + p.score + " kills", sw - 200f, lbY);
-            lbY -= 22f;
+
+        batch.setProjectionMatrix(screenProj);
+        batch.begin();
+
+        font.setColor(new Color(0.80f, 0.80f, 0.80f, 1f));
+        String header = "── LEADERBOARD ──";
+        layout.setText(font, header);
+        font.draw(batch, header, sw - layout.width - 20f, lbTop);
+
+        float rowY = lbTop - rowH;
+        for (PlayerDto p : sorted) {
+            boolean isMe = localId != null && localId.equals(p.playerId);
+            font.setColor(isMe ? new Color(0.20f, 0.95f, 0.30f, 1f)
+                               : Color.LIGHT_GRAY);
+            String line = (isMe ? "► " : "  ") + p.username + ":  " + p.score + " kills";
+            layout.setText(font, line);
+            font.draw(batch, line, sw - layout.width - 20f, rowY);
+            rowY -= rowH;
         }
 
         batch.end();
     }
+
+    // ── Kill feed (last MAX_KILL_FEED entries, always visible) ────────────────
 
     private void drawKillFeed() {
         if (killFeed.isEmpty()) return;
@@ -189,17 +216,18 @@ public final class HudRenderer {
         batch.begin();
 
         float feedY = sh * 0.55f;
-        for (FeedEntry e : killFeed) {
-            float alpha = Math.min(1f, e.ttl); // fade out in last second
-            font.setColor(1f, 0.85f, 0.40f, alpha);
-            font.draw(batch, e.text, 20f, feedY);
+        for (String msg : killFeed) {
+            font.setColor(1f, 0.85f, 0.40f, 1f);
+            font.draw(batch, msg, 20f, feedY);
             feedY += 22f;
         }
 
         batch.end();
     }
 
-    private void drawDeathOverlay(PlayerDto me) {
+    // ── Death overlay ─────────────────────────────────────────────────────────
+
+    private void drawDeathOverlay(PlayerDto me, GameSnapshotDto snap) {
         int sw = Gdx.graphics.getWidth();
         int sh = Gdx.graphics.getHeight();
 
@@ -208,7 +236,7 @@ public final class HudRenderer {
 
         shapes.setProjectionMatrix(screenProj);
         shapes.begin(ShapeRenderer.ShapeType.Filled);
-        shapes.setColor(0f, 0f, 0f, 0.55f);
+        shapes.setColor(0f, 0f, 0f, 0.62f);
         shapes.rect(0, 0, sw, sh);
         shapes.end();
 
@@ -225,9 +253,10 @@ public final class HudRenderer {
         font.draw(batch, respawn, (sw - layout.width) / 2f, sh / 2f - 10f);
 
         batch.end();
-
-        drawKillFeed();
+        // Leaderboard and kill feed are drawn by render() after this method returns.
     }
+
+    // ── Connecting ───────────────────────────────────────────────────────────
 
     private void drawConnecting() {
         int sw = Gdx.graphics.getWidth();
@@ -239,6 +268,23 @@ public final class HudRenderer {
         font.draw(batch, "Connecting...", (sw - layout.width) / 2f, sh / 2f);
         batch.end();
     }
+
+    // ── Pickup toast ─────────────────────────────────────────────────────────
+
+    private void drawPickupToast() {
+        if (pickupToastTimer <= 0f || pickupToast == null) return;
+        float alpha = Math.min(1f, pickupToastTimer);
+        int sw = Gdx.graphics.getWidth();
+        int sh = Gdx.graphics.getHeight();
+        batch.setProjectionMatrix(screenProj);
+        batch.begin();
+        font.setColor(0.30f, 1f, 0.55f, alpha);
+        layout.setText(font, pickupToast);
+        font.draw(batch, pickupToast, (sw - layout.width) / 2f, sh * 0.38f);
+        batch.end();
+    }
+
+    // ── Touch controls (Android only) ────────────────────────────────────────
 
     private void drawTouchControls() {
         Gdx.gl.glEnable(GL20.GL_BLEND);
@@ -264,18 +310,7 @@ public final class HudRenderer {
         batch.end();
     }
 
-    private void drawPickupToast() {
-        if (pickupToastTimer <= 0f || pickupToast == null) return;
-        float alpha = Math.min(1f, pickupToastTimer); // fade in last second
-        int sw = Gdx.graphics.getWidth();
-        int sh = Gdx.graphics.getHeight();
-        batch.setProjectionMatrix(screenProj);
-        batch.begin();
-        font.setColor(0.30f, 1f, 0.55f, alpha);
-        layout.setText(font, pickupToast);
-        font.draw(batch, pickupToast, (sw - layout.width) / 2f, sh * 0.38f);
-        batch.end();
-    }
+    // ── Helpers ──────────────────────────────────────────────────────────────
 
     private void rebuildScreenProj() {
         if (screenProj == null) screenProj = new Matrix4();
