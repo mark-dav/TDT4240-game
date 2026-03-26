@@ -5,6 +5,7 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.mygame.client.domain.model.WorldState;
 import com.mygame.shared.dto.*;
@@ -40,8 +41,19 @@ public final class WorldRenderer {
     private final Map<WeaponType, Texture> weaponTex  = new EnumMap<>(WeaponType.class);
     private Texture playerLocalTex;
     private Texture playerEnemyTex;
+    // 8-directional sprite sheet: [row=direction][col=frame]
+    private Texture characterSheet;
+    private TextureRegion[][] characterFrames; // [8 directions][8 cols]
+    private float animTimer = 0f;
+    private static final float ANIM_FRAME_DT = 0.15f;
+    // Maps angle sector (0=right, CCW) to sprite-sheet row
+    // Sheet rows: 0=down,1=down-left,2=left,3=top-left,4=top,5=top-right,6=right,7=down-right
+    private static final int[] SECTOR_TO_ROW = {6, 5, 4, 3, 2, 1, 0, 7};
     private final Texture[] chestTex = new Texture[2]; // chest_0 / chest_1 for closed variants
     private Texture chestOpenTex;
+    private Texture projBulletTex;
+    private Texture projArrowTex;
+    private Texture projFlameTex;
 
     public WorldRenderer(WorldState worldState,
                          OrthographicCamera camera,
@@ -60,10 +72,14 @@ public final class WorldRenderer {
         tileTex.values().forEach(Texture::dispose);
         pickupTex.values().forEach(Texture::dispose);
         weaponTex.values().forEach(Texture::dispose);
-        if (playerLocalTex != null) playerLocalTex.dispose();
-        if (playerEnemyTex != null) playerEnemyTex.dispose();
+        if (playerLocalTex  != null) playerLocalTex.dispose();
+        if (playerEnemyTex  != null) playerEnemyTex.dispose();
+        if (characterSheet  != null) characterSheet.dispose();
         for (Texture t : chestTex) if (t != null) t.dispose();
         if (chestOpenTex   != null) chestOpenTex.dispose();
+        if (projBulletTex  != null) projBulletTex.dispose();
+        if (projArrowTex   != null) projArrowTex.dispose();
+        if (projFlameTex   != null) projFlameTex.dispose();
     }
 
     // ---- Camera ----
@@ -107,6 +123,7 @@ public final class WorldRenderer {
             drawChestsSprites(snap);
             drawPickupsSprites(snap);
             drawPlayersSprites(snap);
+            drawProjectilesSprites(snap);
         }
 
         batch.end();
@@ -226,9 +243,10 @@ public final class WorldRenderer {
         String localId = worldState.getLocalPlayerId();
         for (PlayerDto p : snap.players) {
             if (p.pos == null || p.isDead) continue;
+            if (characterFrames != null) continue; // sprite sheet handles all players
             boolean isMe = localId != null && localId.equals(p.playerId);
-            Texture tx   = isMe ? playerLocalTex : playerEnemyTex;
-            if (tx != null) continue; // drawn in sprite pass
+            Texture tx = isMe ? playerLocalTex : playerEnemyTex;
+            if (tx != null) continue;
             shapes.setColor(isMe ? new Color(0.20f, 0.85f, 0.20f, 1f)
                                  : new Color(0.85f, 0.20f, 0.20f, 1f));
             shapes.circle(p.pos.x, p.pos.y, 0.50f, 16);
@@ -242,20 +260,51 @@ public final class WorldRenderer {
     }
 
     private void drawPlayersSprites(GameSnapshotDto snap) {
+        animTimer += Gdx.graphics.getDeltaTime();
+
         String localId = worldState.getLocalPlayerId();
         for (PlayerDto p : snap.players) {
             if (p.pos == null || p.isDead) continue;
-            boolean isMe = localId != null && localId.equals(p.playerId);
 
-            // Player body — drawn at full tile size (1×1)
-            Texture bodyTex = isMe ? playerLocalTex : playerEnemyTex;
-            if (bodyTex != null) {
-                batch.draw(bodyTex, p.pos.x - 0.5f, p.pos.y - 0.5f, 1f, 1f);
+            if (characterFrames != null) {
+                // Determine direction row from facing
+                int row = facingRow(p.facing);
+                // Determine animation column: stand=0, running alternates col 1 / col 3
+                boolean moving = p.vel != null
+                        && (Math.abs(p.vel.x) + Math.abs(p.vel.y)) > 0.05f;
+                int col;
+                if (moving) {
+                    int frame = (int)(animTimer / ANIM_FRAME_DT) % 2;
+                    col = (frame == 0) ? 1 : 3;
+                } else {
+                    col = 0;
+                }
+                batch.draw(characterFrames[row][col],
+                        p.pos.x - 0.5f, p.pos.y - 0.5f, 1f, 1f);
+            } else {
+                boolean isMe = localId != null && localId.equals(p.playerId);
+                Texture bodyTex = isMe ? playerLocalTex : playerEnemyTex;
+                if (bodyTex != null)
+                    batch.draw(bodyTex, p.pos.x - 0.5f, p.pos.y - 0.5f, 1f, 1f);
             }
 
             // Equipped weapon drawn on top, rotated toward aim direction
             drawWeaponOverlay(p);
         }
+    }
+
+    /**
+     * Maps a facing vector to the sprite-sheet row (0–7).
+     * Angle sectors (each 45°) starting from right, going CCW:
+     *   0=right→row6, 1=top-right→row5, 2=top→row4, 3=top-left→row3,
+     *   4=left→row2,  5=down-left→row1,  6=down→row0, 7=down-right→row7
+     */
+    private int facingRow(com.mygame.shared.util.Vec2 facing) {
+        if (facing == null) return 0;
+        float angle = (float) Math.toDegrees(Math.atan2(facing.y, facing.x));
+        if (angle < 0) angle += 360f;
+        int sector = (int)((angle + 22.5f) / 45f) % 8;
+        return SECTOR_TO_ROW[sector];
     }
 
     /**
@@ -272,9 +321,9 @@ public final class WorldRenderer {
 
         float angle  = (float) Math.toDegrees(Math.atan2(p.facing.y, p.facing.x));
         boolean flip = Math.abs(angle) > 90f;
-        // When flipped the gun points left at 0°; mirror the angle around 180° so it still
-        // lands on the correct side.
-        float drawAngle = flip ? (180f - angle) : angle;
+        // With flipX the base direction is 180° and CCW rotation adds to it,
+        // so effective = 180° + drawAngle. To hit the target angle: drawAngle = angle - 180°.
+        float drawAngle = flip ? (angle - 180f) : angle;
 
         float weapW = 1.2936f;
         float weapH = 0.4158f;
@@ -296,15 +345,61 @@ public final class WorldRenderer {
 
     // ── Projectiles ──────────────────────────────────────────────────────────
 
-    /** Projectiles always use ShapeRenderer (fast, no texture needed). */
+    /** Shape fallback for projectiles without a texture. */
     private void drawProjectilesShapes(GameSnapshotDto snap) {
         if (snap.projectiles == null) return;
         shapes.setColor(0.95f, 0.90f, 0.20f, 1f);
         for (ProjectileDto pr : snap.projectiles) {
             if (pr == null || pr.pos == null) continue;
+            if (resolveProjectileTexture(pr, snap) != null) continue; // drawn in sprite pass
             float r = pr.radius > 0 ? pr.radius : 0.10f;
             shapes.circle(pr.pos.x, pr.pos.y, r, 12);
         }
+    }
+
+    /** Textured projectiles, rotated to match velocity direction. PNGs point straight up. */
+    private void drawProjectilesSprites(GameSnapshotDto snap) {
+        if (snap.projectiles == null) return;
+        for (ProjectileDto pr : snap.projectiles) {
+            if (pr == null || pr.pos == null || pr.vel == null) continue;
+            Texture tx = resolveProjectileTexture(pr, snap);
+            if (tx == null) continue;
+
+            // PNGs point up (90° world). Rotate to velocity direction.
+            float angle = (float) Math.toDegrees(Math.atan2(pr.vel.y, pr.vel.x)) - 90f;
+
+            boolean isArrow = (tx == projArrowTex);
+            float w = isArrow ? 0.20f : 0.28f;
+            float h = isArrow ? 0.55f : 0.28f;
+            float ox = w / 2f;
+            float oy = h / 2f;
+
+            batch.draw(tx,
+                    pr.pos.x - ox, pr.pos.y - oy,
+                    ox, oy, w, h,
+                    1f, 1f, angle,
+                    0, 0, tx.getWidth(), tx.getHeight(),
+                    false, false);
+        }
+    }
+
+    /**
+     * Maps a projectile to its texture by looking up the owner's equipped weapon.
+     * CROSSBOW → arrow, FLAMETHROWER → flame, everything else → bullet.
+     */
+    private Texture resolveProjectileTexture(ProjectileDto pr, GameSnapshotDto snap) {
+        WeaponType wt = null;
+        if (snap.players != null && pr.ownerPlayerId != null) {
+            for (PlayerDto p : snap.players) {
+                if (pr.ownerPlayerId.equals(p.playerId)) {
+                    wt = p.equippedWeaponType;
+                    break;
+                }
+            }
+        }
+        if (wt == WeaponType.CROSSBOW)     return projArrowTex;
+        if (wt == WeaponType.FLAMETHROWER) return projFlameTex;
+        return projBulletTex;
     }
 
     // ── Asset loading ─────────────────────────────────────────────────────────
@@ -324,9 +419,23 @@ public final class WorldRenderer {
         }
         playerLocalTex = tryLoad("characters/player_local.png");
         playerEnemyTex = tryLoad("characters/player_enemy.png");
+        characterSheet = tryLoad("characters/loose_sprites.png");
+        if (characterSheet != null) {
+            int cols = 8, rows = 8;
+            int sw = characterSheet.getWidth()  / cols;
+            int sh = characterSheet.getHeight() / rows;
+            characterFrames = new TextureRegion[rows][cols];
+            for (int r = 0; r < rows; r++)
+                for (int c = 0; c < cols; c++)
+                    characterFrames[r][c] = new TextureRegion(characterSheet,
+                            c * sw, r * sh, sw, sh);
+        }
         chestTex[0]    = tryLoad("chests/chest_0.png");
         chestTex[1]    = tryLoad("chests/chest_1.png");
         chestOpenTex   = tryLoad("chests/chest_open.png");
+        projBulletTex  = tryLoad("projectiles/bullet.png");
+        projArrowTex   = tryLoad("projectiles/arrow.png");
+        projFlameTex   = tryLoad("projectiles/flame.png");
     }
 
     /**

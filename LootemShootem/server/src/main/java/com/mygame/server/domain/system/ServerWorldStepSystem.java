@@ -155,7 +155,7 @@ public final class ServerWorldStepSystem {
 
         for (int slot = 0; slot < 2; slot++) {
             WeaponType wt = p.inventory[slot];
-            if (wt == null || wt == WeaponType.CROSSBOW) continue;
+            if (wt == null || weaponTier(wt) == 0) continue; // tier 0 (crossbow) never drops
             int t = weaponTier(wt);
             if (t > bestWeaponTier) {
                 bestWeaponTier = t;
@@ -168,7 +168,8 @@ public final class ServerWorldStepSystem {
         int speedScore  = p.speedTier;
         int healthScore = p.healthTier / 2;
 
-        if (bestWeaponTier == 0 && speedScore == 0 && healthScore == 0) {
+        if (bestWeaponTier == 0) {
+            // Nothing worth dropping — always leave a heal
             state.pickups.add(new PickupState(UUID.randomUUID().toString(), PickupType.HEALTH,
                     new Vec2(p.pos.x, p.pos.y), 25, 0f, null, 0));
             return;
@@ -194,9 +195,10 @@ public final class ServerWorldStepSystem {
     static int weaponTier(WeaponType t) {
         if (t == null) return 0;
         switch (t) {
-            case CROSSBOW:                  return 1;
-            case PISTOL:                    return 2;
-            case AK: case MACHINEGUN: case SHOTGUN: return 3;
+            case CROSSBOW:                  return 0;
+            case PISTOL:                    return 1;
+            case UZI: case SHOTGUN:         return 2;
+            case AK: case MACHINEGUN:       return 3;
             case SNIPER:                    return 4;
             case FLAMETHROWER:              return 5;
             default:                        return 1;

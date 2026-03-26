@@ -202,7 +202,7 @@ public final class ChestSystem {
             List<WeaponType> available = weaponRegistry.getSwitchOrder();
             // Exclude CROSSBOW (starter) from chest drops
             List<WeaponType> chestWeapons = available.stream()
-                    .filter(w -> w != WeaponType.CROSSBOW)
+                    .filter(w -> ServerWorldStepSystem.weaponTier(w) > 0)
                     .collect(java.util.stream.Collectors.toList());
             WeaponType wt = chestWeapons.isEmpty()
                     ? available.get(rng.nextInt(available.size()))
