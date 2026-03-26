@@ -26,6 +26,8 @@ public final class PlayerDto {
     public WeaponType secondaryWeaponType;
     public int secondaryAmmo;
 
+    public String lastPickupNotice;
+
     public PlayerDto() {}
 
     public PlayerDto(String playerId, String username, Vec2 pos, Vec2 vel, Vec2 facing,

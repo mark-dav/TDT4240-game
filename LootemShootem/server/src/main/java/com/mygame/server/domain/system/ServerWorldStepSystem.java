@@ -39,6 +39,11 @@ public final class ServerWorldStepSystem {
     public void tick(float dt, Map<String, InputMessage> latestInput) {
         state.tick++;
 
+        // Clear per-tick transient notices before pickup system runs
+        for (PlayerState p : state.players.values()) {
+            p.lastPickupNotice = null;
+        }
+
         pickupSpawnSystem.update(dt);
 
         for (PlayerState p : state.players.values()) {

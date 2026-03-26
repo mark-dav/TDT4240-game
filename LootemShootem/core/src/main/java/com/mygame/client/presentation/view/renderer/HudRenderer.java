@@ -36,7 +36,10 @@ public final class HudRenderer {
     private       Matrix4      screenProj;
 
     private final ArrayDeque<FeedEntry> killFeed = new ArrayDeque<>();
-    private long lastProcessedTick = -1;
+    private long   lastProcessedTick = -1;
+
+    private String pickupToast;
+    private float  pickupToastTimer;
 
     public HudRenderer(WorldState worldState,
                        InputHandler inputHandler,
@@ -62,7 +65,7 @@ public final class HudRenderer {
         GameSnapshotDto snap = worldState.getSnapshot();
         PlayerDto       me   = worldState.getLocalPlayer();
 
-        // Ingest new kill feed entries from the latest snapshot (once per tick)
+        // Ingest new kill feed entries and pickup notices from the latest snapshot (once per tick)
         if (snap != null && snap.tick > lastProcessedTick) {
             lastProcessedTick = snap.tick;
             if (snap.killFeed != null) {
@@ -70,7 +73,13 @@ public final class HudRenderer {
                     if (msg != null && !msg.isEmpty()) killFeed.addLast(new FeedEntry(msg));
                 }
             }
+            if (me != null && me.lastPickupNotice != null && !me.lastPickupNotice.isEmpty()) {
+                pickupToast      = me.lastPickupNotice;
+                pickupToastTimer = 3f;
+            }
         }
+
+        if (pickupToastTimer > 0f) pickupToastTimer -= delta;
 
         // Age existing entries
         Iterator<FeedEntry> it = killFeed.iterator();
@@ -93,6 +102,7 @@ public final class HudRenderer {
         }
 
         drawKillFeed();
+        drawPickupToast();
 
         if (inputHandler.isAndroid()) drawTouchControls();
     }
@@ -251,6 +261,19 @@ public final class HudRenderer {
         font.draw(batch, "SW",
                 inputHandler.switchBtnX - layout.width / 2f,
                 inputHandler.switchBtnY + layout.height / 2f);
+        batch.end();
+    }
+
+    private void drawPickupToast() {
+        if (pickupToastTimer <= 0f || pickupToast == null) return;
+        float alpha = Math.min(1f, pickupToastTimer); // fade in last second
+        int sw = Gdx.graphics.getWidth();
+        int sh = Gdx.graphics.getHeight();
+        batch.setProjectionMatrix(screenProj);
+        batch.begin();
+        font.setColor(0.30f, 1f, 0.55f, alpha);
+        layout.setText(font, pickupToast);
+        font.draw(batch, pickupToast, (sw - layout.width) / 2f, sh * 0.38f);
         batch.end();
     }
 

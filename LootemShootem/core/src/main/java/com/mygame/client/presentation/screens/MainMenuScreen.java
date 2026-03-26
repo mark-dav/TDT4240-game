@@ -11,14 +11,18 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Matrix4;
 import com.badlogic.gdx.InputAdapter;
+import com.mygame.client.data.repository.PreferencesRepository;
+import com.mygame.client.domain.ports.PreferencesPort;
 import com.mygame.client.presentation.navigation.Navigator;
 
 public final class MainMenuScreen implements Screen {
 
-    private static final int FIELD_W = 340;
-    private static final int FIELD_H = 38;
-    private static final int BTN_W   = 220;
-    private static final int BTN_H   = 46;
+    private static final int FIELD_W    = 340;
+    private static final int FIELD_H    = 38;
+    private static final int BTN_W      = 220;
+    private static final int BTN_H      = 46;
+    private static final int HOW_BTN_W  = 180;
+    private static final int HOW_BTN_H  = 40;
     private static final int MAX_USERNAME_LEN = 20;
     private static final int MAX_URL_LEN      = 60;
 
@@ -26,8 +30,8 @@ public final class MainMenuScreen implements Screen {
     private String serverUrl;
     private String username;
 
-    // Which field is focused: 0 = server URL, 1 = username
-    private int focusedField = 1;
+    private PreferencesPort prefs;
+    private int focusedField = 1; // 0 = server URL, 1 = username
 
     // Rendering resources (created in show())
     private ShapeRenderer shapes;
@@ -107,6 +111,14 @@ public final class MainMenuScreen implements Screen {
                 tryConnect();
                 return true;
             }
+            // How to Play button
+            int howX = (sw - HOW_BTN_W) / 2;
+            int howY = sh / 2 - 160;
+            if (screenX >= howX && screenX <= howX + HOW_BTN_W
+                    && worldY >= howY && worldY <= howY + HOW_BTN_H) {
+                navigator.showTutorial(serverUrl, username);
+                return true;
+            }
             return false;
         }
     };
@@ -130,6 +142,10 @@ public final class MainMenuScreen implements Screen {
         layout = new GlyphLayout();
         proj   = new Matrix4();
         rebuildProj();
+
+        prefs = new PreferencesRepository();
+        if (username.isEmpty()) username = prefs.getUsername();
+
         Gdx.input.setInputProcessor(inputAdapter);
     }
 
@@ -147,12 +163,14 @@ public final class MainMenuScreen implements Screen {
         Gdx.gl.glClearColor(0.08f, 0.08f, 0.10f, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
-        int urlX   = (sw - FIELD_W) / 2;
+        int urlX   = (sw - FIELD_W)    / 2;
         int urlY   = sh / 2 + 60;
-        int fieldX = (sw - FIELD_W) / 2;
+        int fieldX = (sw - FIELD_W)    / 2;
         int fieldY = sh / 2 - 10;
-        int btnX   = (sw - BTN_W)  / 2;
+        int btnX   = (sw - BTN_W)      / 2;
         int btnY   = sh / 2 - 90;
+        int howX   = (sw - HOW_BTN_W)  / 2;
+        int howY   = sh / 2 - 160;
 
         // --- Shapes ---
         shapes.setProjectionMatrix(proj);
@@ -171,6 +189,10 @@ public final class MainMenuScreen implements Screen {
         // Connect button
         shapes.setColor(0.15f, 0.50f, 0.80f, 1f);
         shapes.rect(btnX, btnY, BTN_W, BTN_H);
+
+        // How to Play button
+        shapes.setColor(0.22f, 0.38f, 0.22f, 1f);
+        shapes.rect(howX, howY, HOW_BTN_W, HOW_BTN_H);
 
         shapes.end();
 
@@ -203,6 +225,12 @@ public final class MainMenuScreen implements Screen {
         String btnLabel = "CONNECT";
         layout.setText(font, btnLabel);
         font.draw(batch, btnLabel, btnX + (BTN_W - layout.width) / 2f, btnY + BTN_H - 10f);
+
+        // How to Play button label
+        font.setColor(new Color(0.55f, 0.90f, 0.55f, 1f));
+        String howLabel = "HOW TO PLAY";
+        layout.setText(font, howLabel);
+        font.draw(batch, howLabel, howX + (HOW_BTN_W - layout.width) / 2f, howY + HOW_BTN_H - 10f);
 
         // Hint
         font.setColor(0.45f, 0.45f, 0.50f, 1f);
@@ -258,6 +286,7 @@ public final class MainMenuScreen implements Screen {
         String url  = serverUrl.trim();
         String name = username.trim();
         if (!url.isEmpty() && !name.isEmpty()) {
+            prefs.saveUsername(name);
             navigator.showGame(url, name);
         }
     }

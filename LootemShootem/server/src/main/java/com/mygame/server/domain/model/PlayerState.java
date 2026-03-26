@@ -30,12 +30,13 @@ public final class PlayerState {
 
     public int lastSwitchSeq = 0;
 
-    public int     score         = 0;
-    public float   timeSurvived  = 0f;
-    public boolean isDead        = false;
-    public boolean justDied      = false; // true for one tick after death, triggers loot drop
-    public float   respawnTimer  = 0f;
+    public int     score           = 0;
+    public float   timeSurvived    = 0f;
+    public boolean isDead          = false;
+    public boolean justDied        = false; // true for one tick after death, triggers loot drop
+    public float   respawnTimer    = 0f;
     public float   speedBoostTimer = 0f;
+    public String  lastPickupNotice;
 
     public PlayerState(String playerId, String username, Vec2 spawnPos) {
         this.playerId = playerId;
@@ -66,6 +67,7 @@ public final class PlayerState {
         int sec = 1 - currentSlot;
         dto.secondaryWeaponType = inventory[sec];
         dto.secondaryAmmo       = ammoBySlot[sec];
+        dto.lastPickupNotice    = lastPickupNotice;
         return dto;
     }
 }

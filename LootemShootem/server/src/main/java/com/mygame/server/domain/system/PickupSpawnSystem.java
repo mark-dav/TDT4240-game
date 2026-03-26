@@ -100,9 +100,11 @@ public final class PickupSpawnSystem {
                 if (pickup.weaponType != null) {
                     int targetSlot = 1 - p.currentSlot;
                     p.inventory[targetSlot]  = pickup.weaponType;
-                    p.ammoBySlot[targetSlot] = pickup.ammoAmount > 0
+                    int ammo = pickup.ammoAmount > 0
                             ? pickup.ammoAmount
                             : weaponRegistry.get(pickup.weaponType).maxAmmo;
+                    p.ammoBySlot[targetSlot] = ammo;
+                    p.lastPickupNotice = "Picked up " + pickup.weaponType.name() + " (" + ammo + " ammo)";
                 }
                 break;
         }
