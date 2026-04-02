@@ -1,5 +1,6 @@
 package com.mygame.shared.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.mygame.shared.util.Vec2;
 
 public final class PlayerDto {
@@ -42,6 +43,16 @@ public final class PlayerDto {
     public int   healthTier;
     /** Current max HP (100 + healthTier * 10). */
     public float maxHp;
+
+    /** True if the player recently took damage (for visual feedback). */
+    @JsonProperty("isHurt")
+    public boolean isHurt;
+    /** True if the player recently received a significant heal (for visual feedback). */
+    @JsonProperty("isHealed")
+    public boolean isHealed;
+
+    /** Kills accumulated since the last respawn (resets to 0 on death). */
+    public int killsThisLife;
 
     public PlayerDto() {}
 
